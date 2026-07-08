@@ -22,8 +22,8 @@ reviewed by eye.
 
 **What this means concretely:**
 - `checkpoints/best_model.pt` is trained on synthetic data only, for a
-  handful of epochs (not 50) on a couple dozen synthetic patients (not 369
-  real ones). It demonstrates the full training/checkpointing/early-stopping
+  handful of epochs (15, not 50) on 24 synthetic patients (not 369 real
+  ones). It demonstrates the full training/checkpointing/early-stopping
   machinery works, but it has **not** learned real glioma tissue patterns.
 - `results/metrics_table.md` and `results/qualitative_examples.png` reflect
   performance on synthetic data. The Dice scores you'll see there are
@@ -81,36 +81,6 @@ up meaningfully beyond the §9 spec as a result:
   index per plane, with the disclaimer restated in the file itself so it
   travels with the artifact if shared.
 
-## Standalone product site (site/index.html)
-
-Midway through the build the user asked for a genuinely designed marketing
-front-door for the tool — three.js, animation, editorial typography, dark
-theme — in the register of premium tech-startup sites (they attached
-reference screenshots), explicitly *not* the Streamlit app's default look.
-`site/index.html` is a self-contained static page (three.js loaded via
-import-map CDN, Fraunces/Inter/IBM Plex Mono via Google Fonts, no build
-step) with a hero built around the product's actual geometry, not generic
-decoration: a wireframe icosahedron ("head") with three orbiting rings
-representing the axial/sagittal/coronal imaging planes, and a highlighted
-"tumor" node with accent-colored connecting lines. It links out to the
-Streamlit app (`appUrl` in the config block at the bottom of the file —
-update this after deploying) and to the GitHub repo (`githubUrl`, same
-block). The brand accent (coral-red, `#ff5a45`) was then carried back into
-`app.py`'s "workstation" theme so the two surfaces read as one product
-instead of two different palettes.
-
-I browser-tested this myself end-to-end (desktop viewport, scroll-reveal
-animations, three.js render, all section content, console errors) rather
-than asking the user to — found and fixed one real bug this way: a stale
-closure in the animated console-log loop (`step` had already been
-incremented by the time a `setTimeout` callback referenced `lineEls[step]`,
-which threw once the loop reached the last line). Mobile-viewport testing
-via the browser tool's window-resize was unreliable in this sandbox (the
-resize call reported success but `window.innerWidth` never changed), so the
-`@media` breakpoints are verified by source inspection (standard, simple
-rules) rather than a live narrow-viewport screenshot — worth a manual check
-on a real phone before shipping.
-
 ## Bugs found and fixed while wiring up the real training run
 
 Running the full pipeline end-to-end on synthetic data (see above) surfaced
@@ -146,8 +116,8 @@ three real bugs that a read-through would not have caught:
 The browser-automation tool available in this environment could not
 render the Streamlit app: even a trivial one-line `st.title("hello")`
 smoke-test app hung on Streamlit's loading skeleton indefinitely with the
-same near-0%-CPU signature as the matplotlib bug above, before that bug was
-found — which is what made that bug hard to isolate (identical symptom, two
+same near-0%-CPU signature as bug #3 above, before that bug was found —
+which is what made bug #3 hard to isolate (identical symptom, two
 different causes: one was my bug, one is an environment limitation).
 
 I confirmed the root cause precisely rather than assuming it: from inside
@@ -196,6 +166,36 @@ drive, plus actually looking at the pixels those interactions produce —
 is the basis for calling the app verified end-to-end despite never seeing
 it live in a browser. If you have a normal (non-sandboxed) browser,
 `streamlit run app.py` and click through it yourself too.
+
+## Standalone product site (site/index.html)
+
+Midway through the build the user asked for a genuinely designed marketing
+front-door for the tool — three.js, animation, editorial typography, dark
+theme — in the register of premium tech-startup sites (they attached
+reference screenshots), explicitly *not* the Streamlit app's default look.
+`site/index.html` is a self-contained static page (three.js loaded via
+import-map CDN, Fraunces/Inter/IBM Plex Mono via Google Fonts, no build
+step) with a hero built around the product's actual geometry, not generic
+decoration: a wireframe icosahedron ("head") with three orbiting rings
+representing the axial/sagittal/coronal imaging planes, and a highlighted
+"tumor" node with accent-colored connecting lines. It links out to the
+Streamlit app (`appUrl` in the config block at the bottom of the file —
+update this after deploying) and to the GitHub repo (`githubUrl`, same
+block). The brand accent (coral-red, `#ff5a45`) was then carried back into
+`app.py`'s "workstation" theme so the two surfaces read as one product
+instead of two different palettes.
+
+I browser-tested this myself end-to-end (desktop viewport, scroll-reveal
+animations, three.js render, all section content, console errors) rather
+than asking the user to — found and fixed one real bug this way: a stale
+closure in the animated console-log loop (`step` had already been
+incremented by the time a `setTimeout` callback referenced `lineEls[step]`,
+which threw once the loop reached the last line). Mobile-viewport testing
+via the browser tool's window-resize was unreliable in this sandbox (the
+resize call reported success but `window.innerWidth` never changed), so the
+`@media` breakpoints are verified by source inspection (standard, simple
+rules) rather than a live narrow-viewport screenshot — worth a manual check
+on a real phone before shipping.
 
 ## Other decisions / edge cases
 
