@@ -54,7 +54,7 @@ def _hd95(pred_region, gt_region, spacing):
     pred_t = torch.from_numpy(pred_region[None, None].astype(np.float32))
     gt_t = torch.from_numpy(gt_region[None, None].astype(np.float32))
     hd = compute_hausdorff_distance(
-        pred_t, gt_t, include_background=True, percentile=95, spacing=list(spacing)
+        pred_t, gt_t, include_background=True, percentile=95, spacing=[float(s) for s in spacing]
     )
     return float(hd.item())
 
