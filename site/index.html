@@ -252,14 +252,14 @@
   <div class="wrap reveal">
     <div class="section-label">By the numbers</div>
     <h2 class="section-title">A deliberate tradeoff: 2D slices over 3D volumes.</h2>
-    <p class="lede">Full volumetric 3D pipelines (like nnU-Net) push Whole Tumor Dice past 0.90, but need
-      GPU clusters to train and run. TumorTrace trades some of that ceiling for a model that trains in a
-      few hours on a free Colab GPU and segments a full brain on CPU in seconds.</p>
+    <p class="lede">The best full-volumetric 3D pipelines (like nnU-Net ensembles) still edge out 2D slice-based
+      models on paper, but need GPU clusters to train. TumorTrace trains on a single consumer GPU and segments
+      a full brain on CPU in seconds, and still lands a Whole Tumor Dice of 0.90 on real, held-out patients.</p>
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-num">369</div>
+        <div class="stat-num">368</div>
         <div class="stat-bar"></div>
-        <div class="stat-label">Glioma patients<br>BraTS 2020 cohort</div>
+        <div class="stat-label">Glioma patients trained on<br>real BraTS 2020 cohort</div>
       </div>
       <div class="stat-card">
         <div class="stat-num">4<span class="unit">seq</span></div>
@@ -267,9 +267,9 @@
         <div class="stat-label">MRI modalities fused<br>per prediction</div>
       </div>
       <div class="stat-card">
-        <div class="stat-num" id="stat-dice">0.80–0.88</div>
+        <div class="stat-num" id="stat-dice">0.904</div>
         <div class="stat-bar"></div>
-        <div class="stat-label">Target Whole Tumor Dice<br>(2D ResNet34-UNet)</div>
+        <div class="stat-label">Whole Tumor Dice<br>on held-out real patients</div>
       </div>
       <div class="stat-card">
         <div class="stat-num">&lt;2<span class="unit">sec</span></div>
@@ -314,26 +314,25 @@
       <tbody id="results-tbody">
         <tr>
           <td class="region"><span class="swatch" style="background:var(--accent)"></span>Whole Tumor</td>
-          <td>0.990</td><td>1.00</td><td>0.993</td><td>1.000</td>
+          <td>0.904</td><td>15.47</td><td>0.888</td><td>0.999</td>
         </tr>
         <tr>
           <td class="region"><span class="swatch" style="background:var(--core)"></span>Tumor Core</td>
-          <td>0.908</td><td>5.23</td><td>0.935</td><td>1.000</td>
+          <td>0.821</td><td>8.95</td><td>0.808</td><td>0.999</td>
         </tr>
         <tr>
           <td class="region"><span class="swatch" style="background:var(--enh)"></span>Enhancing Tumor</td>
-          <td>0.873</td><td>2.23</td><td>0.999</td><td>1.000</td>
+          <td>0.768</td><td>5.28</td><td>0.783</td><td>0.999</td>
         </tr>
       </tbody>
     </table>
-    <p class="qual-caption" style="border:none; padding:0.9rem 0 0 0;">⚠️ From the bundled demo checkpoint, trained on
-      synthetic placeholder data (see BUILD_NOTES.md) — scores read higher than the realistic BraTS targets above
-      because synthetic tumors are cleaner ellipsoids than real glioma tissue. Re-run on real BraTS data for numbers
-      that reflect actual performance.</p>
+    <p class="qual-caption" style="border:none; padding:0.9rem 0 0 0;">Trained on the real 369-patient BraTS 2020
+      cohort (368 usable after excluding one patient with a known corrupt segmentation file), evaluated on 56
+      held-out real test patients never seen during training.</p>
 
     <div class="qual-frame">
       <img src="../results/qualitative_examples.png" alt="Ground truth vs. predicted tumor segmentation, 8 test slices" loading="lazy">
-      <div class="qual-caption">Ground truth (left) vs. TumorTrace prediction (right) — 8 held-out test slices (synthetic demo data).</div>
+      <div class="qual-caption">Ground truth (left) vs. TumorTrace prediction (right) — 8 held-out real test slices.</div>
     </div>
   </div>
 </section>

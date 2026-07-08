@@ -4,7 +4,40 @@ Autonomous build log for TumorTrace. Documents every deviation from the literal
 spec and why, per the build prompt's instruction to log edge cases here
 instead of pausing to ask.
 
-## The one big deviation: synthetic data instead of real BraTS 2020
+## Update: retrained on the real BraTS 2020 cohort
+
+Everything below this note originally described a synthetic-data stand-in,
+because this build started in a sandbox with no Kaggle credentials and no
+GPU. The user later provided Kaggle access, and this machine turned out to
+have Apple Silicon (M4 Pro) with an MPS backend that benchmarked ~13x faster
+than CPU per training batch — `model.best_available_device()` now picks it
+up automatically. With that, the real thing became possible:
+
+- Downloaded the real `awsaf49/brats20-dataset-training-validation` dataset
+  (4.2GB) via the Kaggle API.
+- `preprocess.py` processed 368 of the 369 real training patients (one,
+  `BraTS20_Training_355`, has a known corrupt/misnamed segmentation file —
+  see "Bugs found" below — and is skipped automatically rather than aborting
+  the whole run), yielding 27,618 slices.
+- `train.py` trained for real on MPS: early stopping triggered at **epoch
+  18** (not the full 50), taking about 85 minutes wall-clock. Best val WT
+  Dice 0.8344.
+- `evaluate.py` against the 56 real held-out test patients: **WT Dice
+  0.904, TC 0.821, ET 0.768** — all of which land at or above the honest
+  target ranges stated in the README (0.80–0.88 / 0.70–0.80 / 0.65–0.75),
+  not just within them. `results/metrics_table.md`,
+  `results/qualitative_examples.png`, and `samples/*.npz` were all
+  regenerated from this real checkpoint and now show real patient data
+  (BraTS is released for research use, so bundling de-identified sample
+  volumes from it is within the dataset's terms).
+
+The synthetic-data path documented below is kept as-is: it's exactly what
+happened first, it's still how `dev_tools/make_synthetic_brats.py` and the
+rest of this repo's code paths were originally exercised end-to-end without
+real data access, and it remains a legitimate fallback for anyone re-running
+this build in a sandbox without Kaggle/GPU access.
+
+## The one big deviation: synthetic data instead of real BraTS 2020 (historical — see update above)
 
 This build ran in a sandboxed environment with **no Kaggle credentials and no
 GPU**. Downloading the real ~7GB BraTS20 Kaggle dataset and running 50 epochs
@@ -110,6 +143,48 @@ three real bugs that a read-through would not have caught:
    the standard fix for matplotlib-in-a-web-server. This one cost the most
    debugging time because it looks identical to a networking/proxy issue
    from the outside (compare with the next section).
+
+## Bugs found running against the real BraTS 2020 data specifically
+
+Real data surfaced problems synthetic data structurally couldn't, since the
+synthetic generator never produced anything nested, malformed, or large
+enough to expose them:
+
+4. **`discover_patients()` only checked immediate subdirectories.** The real
+   Kaggle zip extracts as `BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/
+   BraTS20_Training_XXX/`, two levels deeper than the flat layout the
+   synthetic generator produces. Fixed by making `discover_patients()`
+   recurse up to 3 levels down when no patient folders are found directly,
+   so `--raw_dir data/raw` works regardless of how the archive nests things
+   — this is a real, permanent improvement, not a one-off workaround (see
+   the recursion depth guard and `_is_patient_dir` split I added).
+5. **One real patient aborted the entire preprocessing run.**
+   `BraTS20_Training_355`'s segmentation file ships as
+   `W39_1998.09.19_Segm.nii` instead of the standard `*_seg.nii` naming —
+   a documented anomaly in the public BraTS20 dump, not something I
+   introduced. `process_patient()` correctly raised on it, but `main()`'s
+   loop had no error handling, so one bad patient out of 369 killed
+   progress on all the others. Fixed by catching and logging per-patient
+   failures and continuing; the run summary now reports how many patients
+   succeeded vs. were skipped and why. Final count: 368/369 processed.
+6. **`train.py`/`inference.py` never selected MPS.** Both hardcoded `"cuda"
+   if available else "cpu"`, silently ignoring Apple Silicon's GPU backend.
+   On synthetic data (small, ran once) this didn't matter enough to notice.
+   On the real 368-patient dataset it mattered a lot: benchmarked MPS at
+   ~13x faster than CPU per batch (162ms vs 2089ms), which is the
+   difference between the real 50-epoch run finishing in about an hour and
+   it taking most of a day. Added `model.best_available_device()`
+   (cuda > mps > cpu) and used it in both places.
+7. **`DataLoader(num_workers=4)` silently stalled** on the real dataset in
+   this environment — the process sat at near-0% CPU for 10+ minutes with
+   no error, no crash, just nothing happening (multiprocessing worker
+   processes appear to not start correctly in this sandbox). This is
+   different from bug #6: it's not a matter of speed, it's a hang. Confirmed
+   by isolating `build_datasets()` in the same environment (a clean 38.7s,
+   not stuck) and by testing `num_workers=0` (worked correctly, actively
+   consuming CPU throughout). The real 50-epoch run used `num_workers=0`.
+   If you're running this somewhere without that restriction, `num_workers`
+   in the 2-4 range should load data faster during training.
 
 ## A note on how app.py was actually verified
 

@@ -1,7 +1,7 @@
-# TumorTrace — Test Set Results (4 patients)
+# TumorTrace — Test Set Results (56 patients)
 
 | Region | Dice | HD95 (mm) | Sensitivity | Specificity |
 |---|---|---|---|---|
-| WT | 0.990 | 1.00 | 0.993 | 1.000 |
-| TC | 0.908 | 5.23 | 0.935 | 1.000 |
-| ET | 0.873 | 2.23 | 0.999 | 1.000 |
+| WT | 0.904 | 15.47 | 0.888 | 0.999 |
+| TC | 0.821 | 8.95 | 0.808 | 0.999 |
+| ET | 0.768 | 5.28 | 0.783 | 0.999 |
