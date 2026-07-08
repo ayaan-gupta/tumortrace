@@ -147,8 +147,8 @@ tumortrace/
 ├── requirements.txt
 ├── constants.py          # label maps, region defs, geometry, overlay colors
 ├── preprocess.py          # NIfTI -> normalized 2D slice pairs + patient split
-├── dataset.py             # PyTorch Dataset class
-├── model.py               # model + loss factory functions
+├── dataset.py             # PyTorch Dataset + augmentation
+├── model.py               # U-Net + Dice/CE loss + region-Dice metrics
 ├── train.py                # training loop (source of truth)
 ├── train.ipynb             # Colab-friendly notebook wrapping train.py
 ├── evaluate.py              # test-set Dice/HD95/sensitivity/specificity + qualitative grid
