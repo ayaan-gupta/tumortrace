@@ -2,19 +2,18 @@
 
 **TumorTrace finds the exact boundary of a brain tumor on an MRI scan in seconds.** It is a pixel-level segmentation model trained on 368 real glioma patients from the BraTS 2020 challenge, wrapped in a viewer built for looking closely at a scan, not for making a diagnosis.
 
-> **This is a research and educational prototype, not a medical device.** It has not been clinically validated and must never be used for actual diagnosis or treatment decisions. Segmentation outputs should only ever be interpreted by a qualified radiologist or neuro-oncologist.
+> **This is a research prototype, not a medical device.** It has not been clinically validated and must never be used for actual diagnosis or treatment decisions. Segmentation outputs should only ever be interpreted by a qualified radiologist or neuro-oncologist.
 
 ![Axial, sagittal, and coronal views of a real BraTS test patient, FLAIR on the left and TumorTrace's predicted segmentation on the right](results/figures/multiplanar_hero.png)
 
-I want to say upfront what this project is and isn't. It is a real, working, end-to-end system: real data, a real training run, real evaluation numbers on patients the model never saw. It is not a substitute for a radiologist, and it never will be, that's not a caveat I'm hedging with, it's the actual design intent. What follows is the how and the why.
 
 ## How it works
 
-A glioma doesn't look the same on every MRI sequence, which is exactly why radiologists order more than one. T1ce (the contrast-enhanced scan) lights up the actively growing rim of the tumor. FLAIR and T2 make the surrounding swelling, the edema, hard to miss. Plain T1 gives you the baseline anatomy everything else gets compared against. TumorTrace stacks all four into a single 4-channel volume and feeds it, slice by slice, into a U-Net with a ResNet34 encoder (pretrained on ImageNet, then fine-tuned on glioma tissue). For every pixel, the model outputs a probability over four classes: background, necrotic core, edema, and enhancing tumor. Those per-slice predictions get stitched back into a full 3D volume, colorized, and laid over the scan so you can see the tumor's shape, its extent, and how its sub-regions are actually arranged, not just a blob where "something's wrong."
+A glioma doesn't look the same on every MRI sequence, which is exactly why radiologists order more than one. T1ce (the contrast-enhanced scan) lights up the actively growing rim of the tumor. FLAIR and T2 make the surrounding swelling, the edema, hard to miss. Plain T1 provides the baseline anatomy everything else gets compared against. TumorTrace stacks all four into a single 4-channel volume and feeds it into a U-Net with a ResNet34 encoder (pretrained on ImageNet, then fine-tuned on glioma tissue). For every pixel, the model outputs a probability over four classes: background, necrotic core, edema, and enhancing tumor. Those per-slice predictions get stitched back into a full 3D volume, colorized, and laid over the scan so you can see the tumor's shape, its extent, and how its sub-regions are actually arranged, rather than a fuzzy area where "something's wrong."
 
 ## Why 2D slices instead of a full 3D model
 
-The honest answer is compute. A full volumetric 3D network (something like nnU-Net's ensemble) will beat this approach on paper, current published results put state-of-the-art 3D pipelines a few points higher on Whole Tumor Dice. But 3D segmentation networks are hungry: they want multiple GPUs and days of training time, which rules out training one on a free Colab instance or a single consumer laptop GPU. A 2D slice-based U-Net trains in about ninety minutes on a single GPU and segments a full brain on a CPU in a couple of seconds. That's the trade I made, and given how close the real results below land to the 3D ceiling, I think it was the right one for what this project is trying to be: something you can actually run, not just read about.
+The honest answer is compute. A full volumetric 3D network (something like nnU-Net's ensemble) will beat this approach on paper, current published results put state-of-the-art 3D pipelines a few points higher on Whole Tumor Dice. But 3D segmentation networks are hungry: they want multiple GPUs and days of training time, which was immediately ruled out by the resources at my disposal. Despite the tradeoffs, the results land pretty close to those of the 3D ceiling.
 
 ## Results
 
