@@ -1,30 +1,60 @@
-# 🧠 TumorTrace
+# TumorTrace
 
-**TumorTrace draws the exact boundary of a brain tumor on an MRI scan in seconds — trained on 369 real glioma patients from the BraTS 2020 challenge.**
+**TumorTrace finds the exact boundary of a brain tumor on an MRI scan in seconds.** It is a pixel-level segmentation model trained on 368 real glioma patients from the BraTS 2020 challenge, wrapped in a viewer built for looking closely at a scan, not for making a diagnosis.
 
-> ⚠️ **This is a research and educational prototype, not a medical device.** It has not been clinically validated and must never be used for actual diagnosis or treatment decisions. Segmentation outputs should only ever be interpreted by a qualified radiologist or neuro-oncologist.
+> **This is a research and educational prototype, not a medical device.** It has not been clinically validated and must never be used for actual diagnosis or treatment decisions. Segmentation outputs should only ever be interpreted by a qualified radiologist or neuro-oncologist.
 
-![Qualitative examples: ground truth vs. predicted tumor segmentation](results/qualitative_examples.png)
+![Axial, sagittal, and coronal views of a real BraTS test patient, FLAIR on the left and TumorTrace's predicted segmentation on the right](results/figures/multiplanar_hero.png)
 
-**[→ View the product site](site/index.html)** — a standalone, three.js-animated overview of the project (`site/index.html`). Serve it locally with `python -m http.server` from the repo root and open `http://localhost:8000/site/index.html`, or deploy the `site/` folder as-is to GitHub Pages/Vercel/Netlify. Before deploying, edit the two config values at the bottom of `site/index.html` (`appUrl`, `githubUrl`) to point at your deployed Streamlit app and repo.
-
----
+I want to say upfront what this project is and isn't. It is a real, working, end-to-end system: real data, a real training run, real evaluation numbers on patients the model never saw. It is not a substitute for a radiologist, and it never will be, that's not a caveat I'm hedging with, it's the actual design intent. What follows is the how and the why.
 
 ## How it works
 
-TumorTrace takes four co-registered MRI sequences of the same patient's brain — T1, T1ce (contrast-enhanced), T2, and FLAIR — because each sequence lights up different tumor tissue: T1ce highlights the actively enhancing tumor rim, FLAIR and T2 make the surrounding swelling (edema) obvious, and T1 gives the baseline anatomy. The four volumes are stacked into a 4-channel image and fed slice-by-slice into a U-Net (a ResNet34 pretrained on ImageNet as the encoder), which outputs, for every pixel, a probability over four classes: background, necrotic/non-enhancing core, edema, and enhancing tumor. Predictions are stitched back into a 3D volume, colorized, and overlaid on the scan so the tumor's shape, extent, and sub-region composition are visible at a glance.
+A glioma doesn't look the same on every MRI sequence, which is exactly why radiologists order more than one. T1ce (the contrast-enhanced scan) lights up the actively growing rim of the tumor. FLAIR and T2 make the surrounding swelling, the edema, hard to miss. Plain T1 gives you the baseline anatomy everything else gets compared against. TumorTrace stacks all four into a single 4-channel volume and feeds it, slice by slice, into a U-Net with a ResNet34 encoder (pretrained on ImageNet, then fine-tuned on glioma tissue). For every pixel, the model outputs a probability over four classes: background, necrotic core, edema, and enhancing tumor. Those per-slice predictions get stitched back into a full 3D volume, colorized, and laid over the scan so you can see the tumor's shape, its extent, and how its sub-regions are actually arranged, not just a blob where "something's wrong."
+
+## Why 2D slices instead of a full 3D model
+
+The honest answer is compute. A full volumetric 3D network (something like nnU-Net's ensemble) will beat this approach on paper, current published results put state-of-the-art 3D pipelines a few points higher on Whole Tumor Dice. But 3D segmentation networks are hungry: they want multiple GPUs and days of training time, which rules out training one on a free Colab instance or a single consumer laptop GPU. A 2D slice-based U-Net trains in about ninety minutes on a single GPU and segments a full brain on a CPU in a couple of seconds. That's the trade I made, and given how close the real results below land to the 3D ceiling, I think it was the right one for what this project is trying to be: something you can actually run, not just read about.
+
+## Results
+
+Trained on 368 of the 369 BraTS 2020 training patients (one has a corrupted segmentation file in the public release, more on that in [`BUILD_NOTES.md`](BUILD_NOTES.md)) and evaluated on 56 held-out patients the model never saw during training or validation. Early stopping cut training off at epoch 18 of a planned 50, once validation Dice on the whole tumor stopped improving.
+
+![Training loss and per-region validation Dice across 18 epochs, dashed line marks the epoch the checkpoint was taken from](results/figures/training_curves.png)
+
+<!-- RESULTS_TABLE_START -->
+| Region | Dice | HD95 (mm) | Sensitivity | Specificity |
+|---|---|---|---|---|
+| Whole Tumor (WT) | 0.904 | 15.47 | 0.888 | 0.999 |
+| Tumor Core (TC) | 0.821 | 8.95 | 0.808 | 0.999 |
+| Enhancing Tumor (ET) | 0.768 | 5.28 | 0.783 | 0.999 |
+<!-- RESULTS_TABLE_END -->
+
+Before training, I wrote down realistic target ranges for this approach based on published results for comparable 2D methods (WT 0.80 to 0.88, TC 0.70 to 0.80, ET 0.65 to 0.75), specifically so I couldn't quietly move the goalposts after the fact. All three regions cleared the top of their range.
+
+![Achieved Dice per region plotted against the pre-registered target range](results/figures/results_vs_target.png)
+
+Dice and sensitivity tell a clean story. HD95 is the honest complication: it's the 95th-percentile Hausdorff distance, essentially "how far off is your worst-case boundary point," and it punishes small stray false-positive islands far more harshly than Dice does, since Dice is a volume-overlap measure and barely notices a handful of misclassified voxels sitting somewhere they shouldn't be. A WT Dice of 0.90 with an HD95 of 15mm is a normal combination for this kind of model, not a contradiction: it means the bulk of the tumor is segmented very accurately while a small number of outlier pixels elsewhere in the brain pull the worst-case distance up. It's worth knowing about before you stare at that number and wonder what went wrong. Nothing did.
+
+Here's what that segmentation actually looks like against ground truth, on real held-out test patients:
+
+![Ground truth versus predicted segmentation on 8 real test slices](results/qualitative_examples.png)
+
+Most of these are close calls between the model and the radiologist who drew the ground truth. A couple aren't: there's a case in there where the model calls something enhancing tumor and the ground truth calls it necrotic core, which is a genuinely hard distinction even for people who do this for a living, since both can look similar on a single modality and the real signal is often subtle contrast enhancement patterns across sequences. I'd rather show that slice than hide it.
 
 ## App features
 
-Beyond the core "upload scans, see overlay" flow, the Streamlit app includes:
+The point of the app isn't just "upload a scan, see a colored blob." Once a volume is loaded, inference runs exactly once and everything below is free:
 
-- **Multi-planar viewing** — independent Axial / Sagittal / Coronal tabs reformatted from the same predicted 3D volume.
-- **Interactive 3D render** — a 4th tab renders the brain and predicted tumor as an actual rotatable/zoomable 3D volume (via [NiiVue](https://niivue.github.io), WebGL, 100% client-side), with an interactive cross-section clip-plane slider and tumor-opacity control.
-- **Model-confidence heatmap** — toggle the overlay to show per-voxel max-softmax confidence instead of the label mask, to see where the model is unsure.
-- **Overlay controls** — adjustable opacity, per-sub-region visibility (isolate the enhancing rim, hide edema, etc.), and optional colorblind-friendly patterns (dots/stripes/crosshatch) so the overlay doesn't rely on hue alone.
-- **Tumor-extent profile** — a per-plane chart of tumor voxel count across all slices, marking the current slice, so you can jump straight to the largest cross-section.
-- **Downloadable markdown report** — per-region volumes and key slice indices, alongside the predicted mask `.nii.gz` download.
-- **Test-time augmentation** — predictions average the original slice and its horizontal flip (mirroring a training augmentation) for modestly better accuracy at ~2x inference cost, still well under a second per slice.
+- **Multi-planar viewing.** Independent Axial, Sagittal, and Coronal tabs, all reformatted from the same predicted 3D volume, no extra inference cost per tab.
+- **An actual 3D render.** A fourth tab renders the brain and the tumor as a real, rotatable, zoomable 3D volume using [NiiVue](https://niivue.github.io), the same WebGL viewer used in published neuroimaging research. It runs entirely in your browser, drag to rotate it, scroll to zoom, and there's a cross-section slider so you can cut into the volume and see the tumor from the inside.
+- **A model-confidence heatmap**, toggled in place of the label overlay, showing per-voxel max-softmax confidence. It's usually high everywhere except right at the boundary between tissue types, which is exactly where you'd want a model to admit some uncertainty.
+- **Overlay controls**: opacity, per-sub-region visibility (hide edema to see the enhancing core more clearly, say), and an optional colorblind-friendly mode that adds dot, stripe, and crosshatch textures on top of the color, so the overlay doesn't rely on hue alone.
+- **A tumor-extent profile**, a small chart of tumor voxel count across every slice in the current plane, with the current slice marked, so you can jump straight to the largest cross-section instead of scrubbing blindly.
+- **A downloadable report**, markdown, with per-region volumes and the slice indices of interest, alongside a `.nii.gz` download of the full predicted mask.
+- **Test-time augmentation** on by default: every prediction averages the original slice with its horizontal flip (mirroring an augmentation the model actually trained under), for a small, real accuracy improvement at roughly double the inference cost, which is still comfortably under a second per slice.
+
+There's also a [standalone product site](site/index.html) (`site/index.html`), a three.js-animated overview of the project separate from the working app. Serve it locally with `python -m http.server` from the repo root and open `http://localhost:8000/site/index.html`, or deploy the `site/` folder as-is to GitHub Pages, Vercel, or Netlify. Edit the two config values at the bottom of the file (`appUrl`, `githubUrl`) to point at your own deployment before sharing it.
 
 ## Architecture
 
@@ -57,37 +87,28 @@ Beyond the core "upload scans, see overlay" flow, the Streamlit app includes:
 
 ## Dataset
 
-Trained on **BraTS 2020** (369 patients, pre-operative multimodal MRI of glioma patients), sourced from the Kaggle mirror [`awsaf49/brats20-dataset-training-validation`](https://www.kaggle.com/datasets/awsaf49/brats20-dataset-training-validation), with the [Medical Segmentation Decathlon Task01_BrainTumour](http://medicaldecathlon.com/) as a no-login fallback. All volumes are already skull-stripped, co-registered, and resampled to 1mm³ isotropic (240×240×155).
+Trained on **BraTS 2020** (pre-operative multimodal MRI from glioma patients), sourced from the Kaggle mirror [`awsaf49/brats20-dataset-training-validation`](https://www.kaggle.com/datasets/awsaf49/brats20-dataset-training-validation), with the [Medical Segmentation Decathlon Task01_BrainTumour](http://medicaldecathlon.com/) as a no-login fallback. Every volume ships already skull-stripped, co-registered, and resampled to 1mm³ isotropic resolution (240×240×155).
 
-**Citation / Acknowledgments** — please cite the following if you use this data or build on this work:
+If you use this data or build on this work, please cite the BraTS papers, not this repo:
 
-- B. H. Menze et al., "The Multimodal Brain Tumor Image Segmentation Benchmark (BRATS)," *IEEE Transactions on Medical Imaging*, 2015.
-- S. Bakas et al., "Advancing The Cancer Genome Atlas glioma MRI collections with expert segmentation labels and radiomic features," *Nature Scientific Data*, 2017.
-- BraTS 2020 challenge data usage terms apply — research/educational use only.
+```bibtex
+@article{menze2015brats,
+  title   = {The Multimodal Brain Tumor Image Segmentation Benchmark (BRATS)},
+  author  = {Menze, Bjoern H. and Jakab, Andras and Bauer, Stefan and others},
+  journal = {IEEE Transactions on Medical Imaging},
+  year    = {2015}
+}
 
-## Results
+@article{bakas2017advancing,
+  title   = {Advancing The Cancer Genome Atlas glioma MRI collections with expert
+             segmentation labels and radiomic features},
+  author  = {Bakas, Spyridon and Akbari, Hamed and Sotiras, Aristeidis and others},
+  journal = {Nature Scientific Data},
+  year    = {2017}
+}
+```
 
-Evaluated on the held-out patient-level test split (15% of patients, never seen during training or validation). Metrics are computed per patient on the full reconstructed 3D volume, then averaged.
-
-<!-- RESULTS_TABLE_START -->
-| Region | Dice | HD95 (mm) | Sensitivity | Specificity |
-|---|---|---|---|---|
-| Whole Tumor (WT) | 0.990 | 1.00 | 0.993 | 1.000 |
-| Tumor Core (TC) | 0.908 | 5.23 | 0.935 | 1.000 |
-| Enhancing Tumor (ET) | 0.873 | 2.23 | 0.999 | 1.000 |
-
-⚠️ **These specific numbers are from the bundled demo checkpoint, which is trained on synthetic placeholder data (see [`BUILD_NOTES.md`](BUILD_NOTES.md)), not the real 369-patient BraTS 2020 cohort** — the synthetic tumors are geometrically clean ellipsoids, an easier problem than real glioma tissue, which is why these scores read higher than the realistic target ranges below. Re-run `evaluate.py` after training on real data to get numbers that reflect actual model performance.
-<!-- RESULTS_TABLE_END -->
-
-**Target ranges** for this 2D slice-based ResNet34-U-Net approach (realistic goals, not guarantees — depends on the training run):
-
-| Region | Target Dice |
-|---|---|
-| Whole Tumor (WT) | 0.80 – 0.88 |
-| Tumor Core (TC) | 0.70 – 0.80 |
-| Enhancing Tumor (ET) | 0.65 – 0.75 |
-
-For context, state-of-the-art full-3D nnU-Net pipelines reach WT Dice ≈ 0.90+. This project trades some of that ceiling for a model that trains in a few hours on a free Colab GPU and runs segmentation on CPU in seconds — that's the deliberate tradeoff of a 2D slice-based approach over full volumetric 3D.
+BraTS data usage terms apply: research and educational use only.
 
 ## Run it yourself
 
@@ -101,20 +122,19 @@ pip install -r requirements.txt
 
 ### 2. Get the data
 
+Kaggle retired the old `kaggle.json` key file in favor of a plain bearer token. Generate one at [kaggle.com/settings/api](https://www.kaggle.com/settings/api) and save it to `~/.kaggle/access_token`, then:
+
 ```bash
-pip install kaggle
-# Get an API token from https://www.kaggle.com/settings -> "Create New API Token",
-# then place the downloaded kaggle.json at ~/.kaggle/kaggle.json (chmod 600).
 kaggle datasets download -d awsaf49/brats20-dataset-training-validation
 unzip brats20-dataset-training-validation.zip -d data/raw
 ```
 
-If Kaggle access isn't available, download [Task01_BrainTumour](http://medicaldecathlon.com/) instead and lay it out as `data/raw/{patient_id}/{patient_id}_{t1,t1ce,t2,flair,seg}.nii.gz` — `preprocess.py` doesn't care which source populated the directory, only the filename suffixes.
+The zip extracts training and validation data as siblings (`data/raw/BraTS2020_TrainingData/MICCAI_BraTS2020_TrainingData/...`); point `preprocess.py` at the `BraTS2020_TrainingData` branch specifically, since the validation patients have no segmentation labels to train on. If Kaggle access isn't available, [Task01_BrainTumour](http://medicaldecathlon.com/) works as a fallback; `preprocess.py` only cares about filename suffixes, not which source populated the directory.
 
 ### 3. Preprocess
 
 ```bash
-python preprocess.py --raw_dir data/raw --out_dir data/processed
+python preprocess.py --raw_dir data/raw/BraTS2020_TrainingData --out_dir data/processed
 ```
 
 ### 4. Train
@@ -123,12 +143,12 @@ python preprocess.py --raw_dir data/raw --out_dir data/processed
 python train.py --processed_dir data/processed --max_epochs 50
 ```
 
-(or open `train.ipynb` in Colab for a free-tier-GPU-friendly walkthrough — it calls the exact same code).
+`model.best_available_device()` picks CUDA, then Apple Silicon's MPS backend, then falls back to CPU. On an M4 Pro, MPS trained about 13x faster than CPU per batch, which is the difference between an afternoon and the better part of a week. `train.ipynb` runs the identical pipeline in Colab or a local Jupyter kernel, if you'd rather work in notebook cells.
 
 ### 5. Evaluate
 
 ```bash
-python evaluate.py --raw_dir data/raw --processed_dir data/processed --checkpoint checkpoints/best_model.pt
+python evaluate.py --raw_dir data/raw/BraTS2020_TrainingData --processed_dir data/processed --checkpoint checkpoints/best_model.pt
 ```
 
 Writes `results/metrics_table.md` and `results/qualitative_examples.png`.
@@ -139,7 +159,7 @@ Writes `results/metrics_table.md` and `results/qualitative_examples.png`.
 streamlit run app.py
 ```
 
-Ships with 3 bundled sample cases in `samples/` so the app works immediately without any data download.
+Ships with 3 bundled real BraTS test cases in `samples/`, so the app works immediately without any data download.
 
 ## Repository structure
 
@@ -150,27 +170,39 @@ tumortrace/
 ├── constants.py          # label maps, region defs, geometry, overlay colors
 ├── preprocess.py          # NIfTI -> normalized 2D slice pairs + patient split
 ├── dataset.py             # PyTorch Dataset + augmentation
-├── model.py               # U-Net + Dice/CE loss + region-Dice metrics
+├── model.py               # U-Net + Dice/CE loss + region-Dice metrics + device selection
 ├── train.py                # training loop (source of truth)
-├── train.ipynb             # Colab-friendly notebook wrapping train.py
+├── train.ipynb             # Colab/local-portable notebook wrapping train.py
 ├── evaluate.py              # test-set Dice/HD95/sensitivity/specificity + qualitative grid
-├── inference.py             # segment_volume(): NIfTI dir -> 3D predicted mask
+├── inference.py             # segment_volume(): NIfTI dir -> 3D predicted mask, with TTA
+├── viewer3d.py               # NiiVue-based 3D viewer HTML builder
 ├── app.py                    # Streamlit interactive viewer
 ├── make_samples.py            # builds samples/*.npz from the test split
 ├── checkpoints/best_model.pt
-├── samples/                   # 3 bundled demo cases (.npz)
-├── site/index.html             # standalone three.js product/marketing site
+├── samples/                   # 3 bundled real demo cases (.npz)
+├── site/index.html             # standalone three.js product site
 ├── results/
 │   ├── metrics_table.md
-│   └── qualitative_examples.png
-├── dev_tools/                  # sandbox-only synthetic-data helper (see BUILD_NOTES.md)
+│   ├── qualitative_examples.png
+│   └── figures/                # training curves, results charts, multi-planar renders
+├── dev_tools/                  # synthetic-data generator, for sandboxes with no data/GPU access
 └── BUILD_NOTES.md
 ```
+
+## Limitations
+
+Writing these down is part of doing this honestly, not an afterthought.
+
+- **2D, not 3D.** The model sees one axial slice at a time; it has no explicit information about what's happening in the slices above or below. A full 3D or 2.5D (multi-slice-context) model would likely close some of the gap to the nnU-Net ceiling mentioned earlier.
+- **One institution's worth of scanners, roughly.** BraTS pools data from multiple sites, but it's still a curated research dataset. Real-world scanner variation, unusual tumor presentations, and post-surgical cavities are all things this model hasn't necessarily seen.
+- **HD95 is worse than Dice makes it look.** See the results discussion above; the boundary-distance metric is the one to watch if you care about worst-case behavior, not just average overlap.
+- **No DICOM support.** Clinical scanners speak DICOM; this pipeline speaks NIfTI. Converting is a solved problem elsewhere, just not one this repo solves for you.
+- **Not validated on anything but BraTS.** No external test set, no multi-site generalization study, no radiologist-in-the-loop evaluation. That's a much bigger undertaking than one repo, and it's exactly the gap between "research prototype" and "medical device."
 
 ## Explicitly out of scope
 
 2D slice-based only (no 3D volumetric model), no auth, no mobile app, no DICOM support (NIfTI only), no multi-GPU training.
 
-## Disclaimer (restated)
+## Disclaimer, restated
 
 > **This is a research and educational prototype, not a medical device.** It has not been clinically validated and must never be used for actual diagnosis or treatment decisions. Segmentation outputs should only ever be interpreted by a qualified radiologist or neuro-oncologist.
