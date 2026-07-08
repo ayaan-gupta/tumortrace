@@ -141,6 +141,25 @@ three real bugs that a read-through would not have caught:
    debugging time because it looks identical to a networking/proxy issue
    from the outside (compare with the next section).
 
+## A note on how app.py was actually verified
+
+The browser-automation tool available in this environment could not render
+the Streamlit app: even a trivial one-line `st.title("hello")` smoke-test
+app hung on Streamlit's loading skeleton indefinitely with the same
+near-0%-CPU signature as the matplotlib bug above, before that bug was
+found. Once the hello-world control case confirmed the hang was
+environment-wide and not app-specific, I switched verification strategy to
+Streamlit's own `streamlit.testing.v1.AppTest`, which runs the script
+directly through Python with no browser or WebSocket involved. That test
+(kept out of the repo since it's a one-off verification script, not a
+maintained test suite) drove: initial load with the default sample case,
+all three plane tabs, the Segmentation→Confidence overlay toggle, dragging
+the axial slider, unchecking a sub-region visibility box, and confirmed
+both download buttons render — zero exceptions across all of it. That's
+the basis for calling the app verified end-to-end; if you have a normal
+browser (not this sandbox), `streamlit run app.py` and click through it
+yourself for a visual check too.
+
 ## Other decisions / edge cases
 
 - **Python 3.11 used instead of 3.10.** Spec says "3.10+"; 3.11 was the
