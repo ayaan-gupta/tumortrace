@@ -12,6 +12,16 @@
 
 TumorTrace takes four co-registered MRI sequences of the same patient's brain — T1, T1ce (contrast-enhanced), T2, and FLAIR — because each sequence lights up different tumor tissue: T1ce highlights the actively enhancing tumor rim, FLAIR and T2 make the surrounding swelling (edema) obvious, and T1 gives the baseline anatomy. The four volumes are stacked into a 4-channel image and fed slice-by-slice into a U-Net (a ResNet34 pretrained on ImageNet as the encoder), which outputs, for every pixel, a probability over four classes: background, necrotic/non-enhancing core, edema, and enhancing tumor. Predictions are stitched back into a 3D volume, colorized, and overlaid on the scan so the tumor's shape, extent, and sub-region composition are visible at a glance.
 
+## App features
+
+Beyond the core "upload scans, see overlay" flow, the Streamlit app includes:
+
+- **Multi-planar viewing** — independent Axial / Sagittal / Coronal tabs reformatted from the same predicted 3D volume.
+- **Model-confidence heatmap** — toggle the overlay to show per-voxel max-softmax confidence instead of the label mask, to see where the model is unsure.
+- **Overlay controls** — adjustable opacity and per-sub-region visibility (isolate the enhancing rim, hide edema, etc.).
+- **Tumor-extent profile** — a per-plane chart of tumor voxel count across all slices, marking the current slice, so you can jump straight to the largest cross-section.
+- **Downloadable markdown report** — per-region volumes and key slice indices, alongside the predicted mask `.nii.gz` download.
+
 ## Architecture
 
 ```
