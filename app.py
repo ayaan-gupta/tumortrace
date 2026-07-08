@@ -20,7 +20,6 @@ import streamlit as st
 
 from constants import (
     BEST_CHECKPOINT_PATH,
-    CLASS_NAMES,
     DISCLAIMER,
     MODALITIES,
     OVERLAY_ALPHA,
