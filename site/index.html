@@ -314,22 +314,26 @@
       <tbody id="results-tbody">
         <tr>
           <td class="region"><span class="swatch" style="background:var(--accent)"></span>Whole Tumor</td>
-          <td>—</td><td>—</td><td>—</td><td>—</td>
+          <td>0.990</td><td>1.00</td><td>0.993</td><td>1.000</td>
         </tr>
         <tr>
           <td class="region"><span class="swatch" style="background:var(--core)"></span>Tumor Core</td>
-          <td>—</td><td>—</td><td>—</td><td>—</td>
+          <td>0.908</td><td>5.23</td><td>0.935</td><td>1.000</td>
         </tr>
         <tr>
           <td class="region"><span class="swatch" style="background:var(--enh)"></span>Enhancing Tumor</td>
-          <td>—</td><td>—</td><td>—</td><td>—</td>
+          <td>0.873</td><td>2.23</td><td>0.999</td><td>1.000</td>
         </tr>
       </tbody>
     </table>
+    <p class="qual-caption" style="border:none; padding:0.9rem 0 0 0;">⚠️ From the bundled demo checkpoint, trained on
+      synthetic placeholder data (see BUILD_NOTES.md) — scores read higher than the realistic BraTS targets above
+      because synthetic tumors are cleaner ellipsoids than real glioma tissue. Re-run on real BraTS data for numbers
+      that reflect actual performance.</p>
 
     <div class="qual-frame">
       <img src="../results/qualitative_examples.png" alt="Ground truth vs. predicted tumor segmentation, 8 test slices" loading="lazy">
-      <div class="qual-caption">Ground truth (left) vs. TumorTrace prediction (right) — 8 held-out test slices.</div>
+      <div class="qual-caption">Ground truth (left) vs. TumorTrace prediction (right) — 8 held-out test slices (synthetic demo data).</div>
     </div>
   </div>
 </section>
