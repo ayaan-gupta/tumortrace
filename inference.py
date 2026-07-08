@@ -4,7 +4,7 @@ so all three stay numerically consistent."""
 import numpy as np
 import torch
 
-from constants import BEST_CHECKPOINT_PATH, CROP_SIZE, REGION_LABELS
+from constants import BEST_CHECKPOINT_PATH, CROP_SIZE, NUM_CLASSES, REGION_LABELS
 from model import build_model, region_mask
 from preprocess import center_crop_or_pad_2d, load_patient_volumes, uncrop_or_pad_2d
 
@@ -21,11 +21,15 @@ def load_model(checkpoint_path=BEST_CHECKPOINT_PATH, device=None):
 
 
 @torch.no_grad()
-def predict_cropped_volume(model, image, device, batch_size=16):
+def predict_cropped_volume(model, image, device, batch_size=16, return_probs=False):
     """image: (4, size, size, D) float32 array, already center-cropped/padded.
-    Returns predicted label volume (size, size, D) as uint8."""
+    Returns predicted label volume (size, size, D) as uint8, and (if
+    return_probs) the full per-class softmax probability volume
+    (NUM_CLASSES, size, size, D) as float32 — used for the app's model-
+    confidence heatmap view."""
     num_slices = image.shape[-1]
     preds = np.zeros((image.shape[1], image.shape[2], num_slices), dtype=np.uint8)
+    probs = np.zeros((NUM_CLASSES, image.shape[1], image.shape[2], num_slices), dtype=np.float32) if return_probs else None
 
     for start in range(0, num_slices, batch_size):
         end = min(start + batch_size, num_slices)
@@ -35,8 +39,53 @@ def predict_cropped_volume(model, image, device, batch_size=16):
         logits = model(batch_t)
         batch_preds = torch.argmax(logits, dim=1).cpu().numpy()  # (b, H, W)
         preds[:, :, start:end] = np.transpose(batch_preds, (1, 2, 0)).astype(np.uint8)
+        if return_probs:
+            batch_probs = torch.softmax(logits, dim=1).cpu().numpy()  # (b, C, H, W)
+            probs[:, :, :, start:end] = np.transpose(batch_probs, (1, 2, 3, 0))
 
-    return preds
+    return (preds, probs) if return_probs else preds
+
+
+def predict_full_volume(image, model, device, return_probs=False):
+    """image: already-normalized (4, H, W, D) array in native (uncropped) geometry.
+    Handles the center-crop -> predict -> uncrop round trip and returns a
+    prediction at the same (H, W, D) as the input. Shared by segment_volume
+    (NIfTI directories) and app.py (bundled sample .npz volumes).
+
+    If return_probs, also returns a (NUM_CLASSES, H, W, D) softmax probability
+    volume: voxels outside the model's center-cropped field of view are filled
+    with probability 1.0 for the background class (they're zero-intensity /
+    outside the brain anyway) rather than 0 for every class."""
+    orig_h, orig_w, num_slices = image.shape[1], image.shape[2], image.shape[3]
+
+    cropped = np.stack([
+        np.stack([center_crop_or_pad_2d(image[c, :, :, d], size=CROP_SIZE)
+                  for c in range(image.shape[0])], axis=0)
+        for d in range(num_slices)
+    ], axis=-1)  # (4, CROP_SIZE, CROP_SIZE, D)
+
+    if return_probs:
+        cropped_pred, cropped_probs = predict_cropped_volume(model, cropped, device, return_probs=True)
+    else:
+        cropped_pred = predict_cropped_volume(model, cropped, device)
+
+    pred_mask = np.stack([
+        uncrop_or_pad_2d(cropped_pred[:, :, d], orig_h, orig_w, size=CROP_SIZE)
+        for d in range(num_slices)
+    ], axis=-1).astype(np.uint8)
+
+    if not return_probs:
+        return pred_mask
+
+    full_probs = np.stack([
+        np.stack([
+            uncrop_or_pad_2d(cropped_probs[c, :, :, d], orig_h, orig_w, size=CROP_SIZE,
+                              fill_value=(1.0 if c == 0 else 0.0))
+            for d in range(num_slices)
+        ], axis=-1)
+        for c in range(NUM_CLASSES)
+    ], axis=0).astype(np.float32)
+    return pred_mask, full_probs
 
 
 def segment_volume(patient_dir, checkpoint_path=BEST_CHECKPOINT_PATH, model=None, device=None):
@@ -54,21 +103,7 @@ def segment_volume(patient_dir, checkpoint_path=BEST_CHECKPOINT_PATH, model=None
     device = device or next(model.parameters()).device
 
     image, _, zooms, affine = load_patient_volumes(patient_dir, load_seg=False)
-    orig_h, orig_w, num_slices = image.shape[1], image.shape[2], image.shape[3]
-
-    cropped = np.stack([
-        np.stack([center_crop_or_pad_2d(image[c, :, :, d], size=CROP_SIZE)
-                  for c in range(image.shape[0])], axis=0)
-        for d in range(num_slices)
-    ], axis=-1)  # (4, CROP_SIZE, CROP_SIZE, D)
-
-    cropped_pred = predict_cropped_volume(model, cropped, device)  # (CROP_SIZE, CROP_SIZE, D)
-
-    pred_mask = np.stack([
-        uncrop_or_pad_2d(cropped_pred[:, :, d], orig_h, orig_w, size=CROP_SIZE)
-        for d in range(num_slices)
-    ], axis=-1).astype(np.uint8)
-
+    pred_mask = predict_full_volume(image, model, device)
     return pred_mask, zooms, affine
 
 
