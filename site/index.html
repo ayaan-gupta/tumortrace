@@ -409,8 +409,9 @@
   let step = 0, elapsed = 0;
   function tickConsole(){
     if (step < lineEls.length){
-      lineEls[step].classList.add('show');
-      setTimeout(() => lineEls[step].classList.add('done'), 550);
+      const current = lineEls[step];
+      current.classList.add('show');
+      setTimeout(() => current.classList.add('done'), 550);
       step++;
       setTimeout(tickConsole, 700);
     } else {
