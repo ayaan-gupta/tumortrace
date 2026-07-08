@@ -10,6 +10,9 @@ import shutil
 import tempfile
 from glob import glob
 
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend: the default "macosx" backend requires
+                        # the main thread and hangs silently under Streamlit's worker thread
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np

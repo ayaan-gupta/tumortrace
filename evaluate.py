@@ -13,6 +13,8 @@ import json
 import os
 import random
 
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend for headless/CI environments
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
