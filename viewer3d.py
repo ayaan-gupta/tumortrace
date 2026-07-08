@@ -55,7 +55,11 @@ def build_viewer_html(base_b64, mask_b64, height=560, base_opacity=0.55, tumor_o
 <style>
   html, body {{ margin:0; background:#0b0f14; color:#7d8b99; font-family:'IBM Plex Mono',monospace; font-size:11px; }}
   #status {{ padding:5px 8px; letter-spacing:0.04em; text-transform:uppercase; font-size:10px; }}
-  #gl {{ width:100%; height:{canvas_height}px; display:block; }}
+  /* NiiVue sets the canvas's own inline style to width:100%/height:100%, which needs
+     a definite-height ancestor to resolve -- without this wrapper the canvas collapses
+     to the browser's built-in 150px default and the whole render looks tiny. */
+  #gl-wrap {{ width:100%; height:{canvas_height}px; }}
+  #gl {{ display:block; }}
   #controls {{ padding:6px 8px; display:flex; gap:1.4rem; align-items:center; flex-wrap:wrap; border-top:1px solid #263241; }}
   input[type=range] {{ accent-color:#ff5a45; }}
   button {{ background:transparent; border:1px solid #263241; color:#ff5a45; font-family:inherit;
@@ -65,7 +69,7 @@ def build_viewer_html(base_b64, mask_b64, height=560, base_opacity=0.55, tumor_o
 </style></head>
 <body>
 <div id="status">loading 3D viewer…</div>
-<canvas id="gl"></canvas>
+<div id="gl-wrap"><canvas id="gl"></canvas></div>
 <div id="controls">
   <label>Cross-section depth <input type="range" id="clip" min="0" max="100" value="100"></label>
   <label>Tumor opacity <input type="range" id="op" min="0" max="100" value="{int(tumor_opacity * 100)}"></label>
@@ -84,8 +88,24 @@ def build_viewer_html(base_b64, mask_b64, height=560, base_opacity=0.55, tumor_o
         {{ url: "data:application/gzip;base64,{mask_b64}", name: "mask.nii.gz", colormap: "warm", opacity: {tumor_opacity} }}
       ]);
       nv.setSliceType(nv.sliceTypeRender);
-      nv.setClipPlane([0.35, 270, 0]);
+      // NiiVue renders the clip plane itself as a solid magenta slab by default
+      // (opts.clipPlaneColor = [0.7, 0, 0.7, 0.5]) -- that's the "weird purple plane".
+      // The clipping (the actual geometry cut) is separate from that visual and stays
+      // intact; setClipPlaneColor (not a direct opts mutation, which doesn't reach the
+      // renderer) makes the plane indicator fully transparent so only the cut brain
+      // surface shows.
+      nv.setClipPlaneColor([1, 1, 1, 0]);
+      // Default 3D render scale (1.0) leaves a lot of empty canvas around the brain.
+      nv.volScaleMultiplier = 1.8;
+      // Slider starts at 100 ("no clip"), so the initial clip state must match that,
+      // not a partially-clipped view -- otherwise the control and the render disagree
+      // the moment the viewer loads.
+      nv.setClipPlane([0, 270, 0]);
       nv.setRenderAzimuthElevation(110, 10);
+      // Force a resize pass now that the canvas sits in a definite-height wrapper --
+      // niivue only recomputes its GL buffer size in response to a resize event.
+      nv.resizeListener();
+      nv.drawScene();
 
       document.getElementById('clip').addEventListener('input', (e) => {{
         nv.setClipPlane([(1 - e.target.value / 100), 270, 0]);
@@ -94,6 +114,9 @@ def build_viewer_html(base_b64, mask_b64, height=560, base_opacity=0.55, tumor_o
         nv.setOpacity(1, e.target.value / 100);
       }});
       document.getElementById('resetBtn').addEventListener('click', () => {{
+        document.getElementById('clip').value = 100;
+        nv.setClipPlane([0, 270, 0]);
+        nv.volScaleMultiplier = 1.8;
         nv.setRenderAzimuthElevation(110, 10);
       }});
 
