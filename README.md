@@ -6,6 +6,8 @@
 
 ![Qualitative examples: ground truth vs. predicted tumor segmentation](results/qualitative_examples.png)
 
+**[→ View the product site](site/index.html)** — a standalone, three.js-animated overview of the project (`site/index.html`). Serve it locally with `python -m http.server` from the repo root and open `http://localhost:8000/site/index.html`, or deploy the `site/` folder as-is to GitHub Pages/Vercel/Netlify. Before deploying, edit the two config values at the bottom of `site/index.html` (`appUrl`, `githubUrl`) to point at your deployed Streamlit app and repo.
+
 ---
 
 ## How it works
@@ -146,11 +148,14 @@ tumortrace/
 ├── evaluate.py              # test-set Dice/HD95/sensitivity/specificity + qualitative grid
 ├── inference.py             # segment_volume(): NIfTI dir -> 3D predicted mask
 ├── app.py                    # Streamlit interactive viewer
+├── make_samples.py            # builds samples/*.npz from the test split
 ├── checkpoints/best_model.pt
 ├── samples/                   # 3 bundled demo cases (.npz)
+├── site/index.html             # standalone three.js product/marketing site
 ├── results/
 │   ├── metrics_table.md
 │   └── qualitative_examples.png
+├── dev_tools/                  # sandbox-only synthetic-data helper (see BUILD_NOTES.md)
 └── BUILD_NOTES.md
 ```
 
