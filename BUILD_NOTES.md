@@ -242,6 +242,39 @@ is the basis for calling the app verified end-to-end despite never seeing
 it live in a browser. If you have a normal (non-sandboxed) browser,
 `streamlit run app.py` and click through it yourself too.
 
+## train.ipynb: made it actually portable, then actually ran it
+
+`train.ipynb` was originally written by hand to mirror `train.py`, but
+never executed -- it had two Colab-only cells (`from google.colab import
+files`, `!git clone ... && %cd tumortrace`) that would fail outright on a
+local Jupyter kernel. Added an `IN_COLAB` detection cell at the top and
+guarded both, and switched the Kaggle-auth cell to check for
+`~/.kaggle/access_token` first (works in both environments) before falling
+back to the Colab file-upload widget. Also fixed the same two things real
+data had already taught me for the plain scripts: `raw_dir` now points at
+the `BraTS2020_TrainingData` branch specifically instead of the flat zip
+root (avoiding the unlabeled validation set), and the preprocessing cell
+catches and logs per-patient failures instead of letting one bad patient
+(`BraTS20_Training_355`) abort the whole cell.
+
+Then I actually ran it, rather than trusting that it would work because the
+underlying functions were already proven via `train.py`. Executed via
+`jupyter nbconvert --execute` from a temporary copy placed in the repo root
+(nbconvert's kernel defaults to the *notebook's own* directory as its
+working directory, not the caller's -- the first attempt failed with
+`ModuleNotFoundError: No module named 'preprocess'` until I figured that
+out). The copy skipped the redundant re-download (data was already on disk
+from the real run) and redirected the train/evaluate cells to scratch
+paths (`/tmp/tumortrace_verify_checkpoint.pt`, a throwaway 1-epoch run) so
+it couldn't clobber the real checkpoint or results. Every cell ran
+correctly end to end: Colab detection, the credential check, preprocessing
+(368/369 patients, 27,618 slices -- an exact match with the real script-driven
+run), one real training epoch (val WT Dice 0.799, consistent with epoch 1
+of the real run), and a real `evaluate.py` invocation producing real
+Dice/HD95/sensitivity/specificity numbers. Scratch artifacts and the
+temporary notebook copy were deleted afterward; the committed `train.ipynb`
+itself was never touched by the verification run.
+
 ## Second elevation pass: real data, 3D viewer, TTA, accessibility
 
 After the first review pass, the user asked to (1) get real Kaggle credentials
