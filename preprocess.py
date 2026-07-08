@@ -242,12 +242,25 @@ def main():
 
     rng = np.random.RandomState(RANDOM_STATE)
     total_slices = 0
+    failed_patients = []
     for patient_id, patient_dir in patients.items():
-        n = process_patient(patient_id, patient_dir, args.out_dir, rng)
+        try:
+            n = process_patient(patient_id, patient_dir, args.out_dir, rng)
+        except Exception as e:
+            # Real BraTS dumps have known per-patient anomalies (e.g. BraTS20_Training_355's
+            # segmentation file ships as "W39_1998.09.19_Segm.nii" instead of the standard
+            # "*_seg.nii" convention). One malformed patient out of hundreds shouldn't abort
+            # the whole run -- log it and keep going; it just contributes 0 slices.
+            failed_patients.append(patient_id)
+            print(f"[preprocess] SKIPPED {patient_id}: {e}")
+            continue
         total_slices += n
         print(f"[preprocess] {patient_id}: {n} slices")
 
-    print(f"[preprocess] Done. {len(patients)} patients, {total_slices} slices saved to {args.out_dir}")
+    print(f"[preprocess] Done. {len(patients) - len(failed_patients)}/{len(patients)} patients "
+          f"processed, {total_slices} slices saved to {args.out_dir}")
+    if failed_patients:
+        print(f"[preprocess] Skipped {len(failed_patients)} patient(s): {failed_patients}")
     print(f"[preprocess] Split sizes: "
           f"train={len(splits['train'])} val={len(splits['val'])} test={len(splits['test'])}")
 
