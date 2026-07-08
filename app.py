@@ -2,7 +2,8 @@
 
 Visual language is a "radiology workstation" console, not a generic SaaS
 dashboard: flat bordered panels, monospace technical labels, a dark
-teal-on-charcoal palette, no gradients or rounded glass cards.
+coral-on-charcoal palette (matching site/index.html), no gradients or
+rounded glass cards.
 """
 import os
 import shutil
@@ -52,7 +53,7 @@ st.markdown(f"""
     --panel-border: #263241;
     --text: #dbe4ec;
     --text-dim: #7d8b99;
-    --accent: #35d0c0;
+    --accent: #ff5a45;
     --warn: #e2a53e;
     --core: {REGION_HEX['necrotic']};
     --edema: {REGION_HEX['edema']};
@@ -431,8 +432,8 @@ if image is not None:
                 fig, ax = plt.subplots(figsize=(8, 1.6))
                 fig.patch.set_facecolor("#12181f")
                 ax.set_facecolor("#12181f")
-                ax.fill_between(range(len(profile)), profile, color="#35d0c0", alpha=0.35)
-                ax.plot(range(len(profile)), profile, color="#35d0c0", linewidth=1.2)
+                ax.fill_between(range(len(profile)), profile, color="#ff5a45", alpha=0.35)
+                ax.plot(range(len(profile)), profile, color="#ff5a45", linewidth=1.2)
                 ax.axvline(slice_idx, color="#e2a53e", linewidth=1.2)
                 ax.set_xlim(0, len(profile) - 1)
                 ax.tick_params(colors="#7d8b99", labelsize=7)
