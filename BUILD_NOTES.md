@@ -111,6 +111,36 @@ resize call reported success but `window.innerWidth` never changed), so the
 rules) rather than a live narrow-viewport screenshot — worth a manual check
 on a real phone before shipping.
 
+## Bugs found and fixed while wiring up the real training run
+
+Running the full pipeline end-to-end on synthetic data (see above) surfaced
+three real bugs that a read-through would not have caught:
+
+1. **`monai.metrics.compute_hausdorff_distance` rejects `numpy.float32`
+   spacing values** (`evaluate.py`) — `nibabel`'s `header.get_zooms()`
+   returns a tuple of `numpy.float32`, and MONAI's `prepare_spacing` only
+   accepts plain Python numeric types. Fixed by casting each element to
+   `float()` before passing `spacing=`.
+2. **`inference.load_model()` built the model with
+   `encoder_weights="imagenet"`**, which triggers a Hugging Face Hub
+   download/lookup for pretrained ResNet34 weights — completely wasted
+   work, since `load_state_dict()` immediately overwrites every weight with
+   the trained checkpoint two lines later. Worse, if that network call
+   stalls (as it did once here), `load_model()` hangs with no error, which
+   silently hangs the whole app on first load. Fixed by passing
+   `encoder_weights=None` in `load_model()` specifically (training's
+   `build_model()` call in `train.py` is untouched and still uses
+   `"imagenet"`, which is correct there).
+3. **matplotlib defaults to the `macosx` GUI backend on this machine**,
+   which requires the main thread. Streamlit runs the user script on a
+   worker thread, so the first `plt.subplots()` call hung silently (near-0%
+   CPU, page stuck on Streamlit's initial loading skeleton forever, no
+   exception surfaced anywhere). Fixed by calling `matplotlib.use("Agg")`
+   before `import matplotlib.pyplot` in both `app.py` and `evaluate.py` —
+   the standard fix for matplotlib-in-a-web-server. This one cost the most
+   debugging time because it looks identical to a networking/proxy issue
+   from the outside (compare with the next section).
+
 ## Other decisions / edge cases
 
 - **Python 3.11 used instead of 3.10.** Spec says "3.10+"; 3.11 was the
