@@ -213,7 +213,28 @@ def default_slice_index(pred_mask, axis):
     return int(np.argmax(profile))
 
 
-def overlay_rgb(base_gray, label_slice, visible_labels, alpha):
+PATTERN_NAMES = {1: "dots", 2: "diagonal stripes", 3: "crosshatch"}
+
+
+def pattern_mask(label, shape):
+    """Boolean texture mask distinguishing tumor sub-regions by shape, not
+    just hue -- so the overlay stays legible for colorblind users or in
+    grayscale print, not only to users who can see red/yellow/blue apart."""
+    yy, xx = np.mgrid[0:shape[0], 0:shape[1]]
+    if label == 1:  # necrotic / non-enhancing core -> dots
+        period = 8
+        cy, cx = yy % period - period // 2, xx % period - period // 2
+        return (cy ** 2 + cx ** 2) <= 1.6 ** 2
+    if label == 2:  # edema -> diagonal stripes
+        period = 8
+        return ((xx + yy) % period) < 2
+    if label == 3:  # enhancing tumor -> crosshatch
+        period = 9
+        return ((xx % period) < 2) | ((yy % period) < 2)
+    return np.zeros(shape, dtype=bool)
+
+
+def overlay_rgb(base_gray, label_slice, visible_labels, alpha, use_patterns=False):
     rgb = np.stack([base_gray] * 3, axis=-1)
     for label, color in OVERLAY_COLORS.items():
         if label not in visible_labels:
@@ -221,6 +242,10 @@ def overlay_rgb(base_gray, label_slice, visible_labels, alpha):
         mask = label_slice == label
         for c in range(3):
             rgb[..., c] = np.where(mask, (1 - alpha) * rgb[..., c] + alpha * color[c], rgb[..., c])
+        if use_patterns:
+            texture = mask & pattern_mask(label, label_slice.shape)
+            for c in range(3):
+                rgb[..., c] = np.where(texture, rgb[..., c] * 0.35, rgb[..., c])
     return np.clip(rgb, 0, 1)
 
 
@@ -256,9 +281,11 @@ def render_disclaimer():
     """, unsafe_allow_html=True)
 
 
-def render_legend():
+def render_legend(use_patterns=False):
+    label_ids = {"enhancing": 3, "edema": 2, "necrotic": 1}
     swatches = "".join(
-        f'<span><span class="tt-swatch" style="background:{REGION_HEX[key]}"></span>{label}</span>'
+        f'<span><span class="tt-swatch" style="background:{REGION_HEX[key]}"></span>{label}'
+        f'{f" ({PATTERN_NAMES[label_ids[key]]})" if use_patterns else ""}</span>'
         for key, label in [("enhancing", "Enhancing tumor"), ("edema", "Edema"), ("necrotic", "Necrotic / non-enhancing core")]
     )
     st.markdown(f'<div class="tt-legend">{swatches}</div>', unsafe_allow_html=True)
@@ -382,6 +409,10 @@ if image is not None:
         if show_enhancing:
             visible_labels.add(3)
 
+        use_patterns = st.checkbox(
+            "Colorblind-friendly patterns (dots / stripes / crosshatch)", value=False
+        )
+
     tabs = st.tabs(list(PLANES.keys()))
     plane_summary = {}
     for tab, (plane_name, axis) in zip(tabs, PLANES.items()):
@@ -411,11 +442,11 @@ if image is not None:
                         st.markdown('<div class="tt-section-label">Predicted tumor overlay</div>', unsafe_allow_html=True)
                         fig, ax = plt.subplots()
                         fig.patch.set_facecolor("#12181f")
-                        ax.imshow(overlay_rgb(raw_slice, pred_slice, visible_labels, alpha))
+                        ax.imshow(overlay_rgb(raw_slice, pred_slice, visible_labels, alpha, use_patterns))
                         ax.axis("off")
                         st.pyplot(fig)
                         plt.close(fig)
-                        render_legend()
+                        render_legend(use_patterns)
                     else:
                         st.markdown('<div class="tt-section-label">Model confidence (max softmax prob.)</div>', unsafe_allow_html=True)
                         conf_slice = get_plane_slice(confidence_map, axis, slice_idx)
