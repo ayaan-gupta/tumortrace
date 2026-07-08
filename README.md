@@ -68,7 +68,13 @@ Trained on **BraTS 2020** (369 patients, pre-operative multimodal MRI of glioma 
 Evaluated on the held-out patient-level test split (15% of patients, never seen during training or validation). Metrics are computed per patient on the full reconstructed 3D volume, then averaged.
 
 <!-- RESULTS_TABLE_START -->
-See [`results/metrics_table.md`](results/metrics_table.md) for the current numbers.
+| Region | Dice | HD95 (mm) | Sensitivity | Specificity |
+|---|---|---|---|---|
+| Whole Tumor (WT) | 0.990 | 1.00 | 0.993 | 1.000 |
+| Tumor Core (TC) | 0.908 | 5.23 | 0.935 | 1.000 |
+| Enhancing Tumor (ET) | 0.873 | 2.23 | 0.999 | 1.000 |
+
+⚠️ **These specific numbers are from the bundled demo checkpoint, which is trained on synthetic placeholder data (see [`BUILD_NOTES.md`](BUILD_NOTES.md)), not the real 369-patient BraTS 2020 cohort** — the synthetic tumors are geometrically clean ellipsoids, an easier problem than real glioma tissue, which is why these scores read higher than the realistic target ranges below. Re-run `evaluate.py` after training on real data to get numbers that reflect actual model performance.
 <!-- RESULTS_TABLE_END -->
 
 **Target ranges** for this 2D slice-based ResNet34-U-Net approach (realistic goals, not guarantees — depends on the training run):
