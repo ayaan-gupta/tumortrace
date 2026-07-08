@@ -143,22 +143,59 @@ three real bugs that a read-through would not have caught:
 
 ## A note on how app.py was actually verified
 
-The browser-automation tool available in this environment could not render
-the Streamlit app: even a trivial one-line `st.title("hello")` smoke-test
-app hung on Streamlit's loading skeleton indefinitely with the same
-near-0%-CPU signature as the matplotlib bug above, before that bug was
-found. Once the hello-world control case confirmed the hang was
-environment-wide and not app-specific, I switched verification strategy to
-Streamlit's own `streamlit.testing.v1.AppTest`, which runs the script
-directly through Python with no browser or WebSocket involved. That test
-(kept out of the repo since it's a one-off verification script, not a
-maintained test suite) drove: initial load with the default sample case,
-all three plane tabs, the Segmentation→Confidence overlay toggle, dragging
-the axial slider, unchecking a sub-region visibility box, and confirmed
-both download buttons render — zero exceptions across all of it. That's
-the basis for calling the app verified end-to-end; if you have a normal
-browser (not this sandbox), `streamlit run app.py` and click through it
-yourself for a visual check too.
+The browser-automation tool available in this environment could not
+render the Streamlit app: even a trivial one-line `st.title("hello")`
+smoke-test app hung on Streamlit's loading skeleton indefinitely with the
+same near-0%-CPU signature as the matplotlib bug above, before that bug was
+found — which is what made that bug hard to isolate (identical symptom, two
+different causes: one was my bug, one is an environment limitation).
+
+I confirmed the root cause precisely rather than assuming it: from inside
+the browser tab, a raw `new WebSocket("ws://localhost:8600/_stcore/stream")`
+never leaves `readyState 0` (CONNECTING) — no open, error, or close event,
+ever — while `new WebSocket("wss://echo.websocket.org/")` from the same tab
+opens and echoes a message in under a second. So this sandbox's browser
+tool can make plain HTTP requests to localhost (the static `site/index.html`
+and Streamlit's own JS/CSS assets load fine) but cannot complete a
+WebSocket handshake to localhost specifically. That's a hard restriction
+with no code-side fix — Streamlit's entire rendering model depends on that
+connection, so no app.py change could route around it.
+
+Given that, verification proceeded in two complementary ways, both with
+zero browser/WebSocket dependency:
+
+1. **`streamlit.testing.v1.AppTest`** (runs the script directly through
+   Python, no browser involved) — drove initial load with the default
+   sample case, all three plane tabs, the Segmentation→Confidence overlay
+   toggle, dragging the axial slider, unchecking a sub-region visibility
+   box, and confirmed both download buttons render. Zero exceptions.
+2. **Direct visual rendering** — called `app.py`'s own functions
+   (`get_plane_slice`, `overlay_rgb`, `normalize_for_display`,
+   `axis_tumor_profile`, `default_slice_index`) and `inference.py`'s
+   `predict_full_volume` directly against the bundled samples, saved the
+   exact same matplotlib figures the app would show, and inspected them as
+   images. This confirmed, by actually looking: all three plane
+   reformats are anatomically coherent (not garbled/mirrored by the
+   transpose/flip logic); the segmentation overlay colors are correct;
+   the confidence heatmap is high everywhere except right at class
+   boundaries (the expected pattern for a calibrated model, not a bug);
+   the region-visibility toggle actually removes the right color when a
+   checkbox is unchecked; the tumor-extent profile's amber marker lines
+   up with the peak of the curve; all four modality selections render
+   with visibly distinct contrast (matching each modality's synthetic
+   intensity profile); and the opacity slider scales the overlay smoothly
+   from 0.0 to 0.8. Also verified: the NIfTI mask download round-trips
+   through `nib.load` with the original 240×240×155 geometry and label
+   set intact, the markdown report's content matches the true computed
+   volumes/slice indices, and the "Upload your own" code path (temp-file
+   writing + `preprocess.load_patient_volumes`) loads a real synthetic
+   patient directory correctly.
+
+That combination — zero exceptions under every interaction AppTest can
+drive, plus actually looking at the pixels those interactions produce —
+is the basis for calling the app verified end-to-end despite never seeing
+it live in a browser. If you have a normal (non-sandboxed) browser,
+`streamlit run app.py` and click through it yourself too.
 
 ## Other decisions / edge cases
 
