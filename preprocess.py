@@ -43,20 +43,39 @@ def _find_file(patient_dir, pattern):
     return None
 
 
-def discover_patients(data_raw_dir):
-    """Return {patient_id: patient_dir} for every sub-directory that has all
-    4 modality volumes (segmentation mask is optional, since inference-time
-    patient directories won't have one)."""
+def _is_patient_dir(path):
+    if not os.path.isdir(path):
+        return False
+    return all(_find_file(path, pat) for pat in _MODALITY_PATTERNS.values())
+
+
+def discover_patients(data_raw_dir, _depth=0, _max_depth=3):
+    """Return {patient_id: patient_dir} for every directory that has all 4
+    modality volumes (segmentation mask is optional, since inference-time
+    patient directories won't have one).
+
+    Kaggle BraTS zips commonly extract with one or two extra nesting levels
+    (e.g. data/raw/MICCAI_BraTS2020_TrainingData/BraTS20_Training_001/...)
+    rather than patient folders directly under `data_raw_dir`. Rather than
+    requiring the caller to know and pass the exact nested path, this walks
+    up to `_max_depth` levels down and returns patient folders wherever they
+    actually are -- so `preprocess.py --raw_dir data/raw` works whether or
+    not the zip added extra wrapper folders."""
     patients = {}
-    for entry in sorted(os.listdir(data_raw_dir)):
-        patient_dir = os.path.join(data_raw_dir, entry)
-        if not os.path.isdir(patient_dir):
+    entries = sorted(os.listdir(data_raw_dir))
+    subdirs = []
+    for entry in entries:
+        path = os.path.join(data_raw_dir, entry)
+        if not os.path.isdir(path):
             continue
-        modality_paths = {
-            mod: _find_file(patient_dir, pat) for mod, pat in _MODALITY_PATTERNS.items()
-        }
-        if all(modality_paths.values()):
-            patients[entry] = patient_dir
+        if _is_patient_dir(path):
+            patients[entry] = path
+        else:
+            subdirs.append(path)
+
+    if not patients and subdirs and _depth < _max_depth:
+        for subdir in subdirs:
+            patients.update(discover_patients(subdir, _depth=_depth + 1, _max_depth=_max_depth))
     return patients
 
 
