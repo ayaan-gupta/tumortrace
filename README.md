@@ -19,10 +19,12 @@ TumorTrace takes four co-registered MRI sequences of the same patient's brain �
 Beyond the core "upload scans, see overlay" flow, the Streamlit app includes:
 
 - **Multi-planar viewing** — independent Axial / Sagittal / Coronal tabs reformatted from the same predicted 3D volume.
+- **Interactive 3D render** — a 4th tab renders the brain and predicted tumor as an actual rotatable/zoomable 3D volume (via [NiiVue](https://niivue.github.io), WebGL, 100% client-side), with an interactive cross-section clip-plane slider and tumor-opacity control.
 - **Model-confidence heatmap** — toggle the overlay to show per-voxel max-softmax confidence instead of the label mask, to see where the model is unsure.
-- **Overlay controls** — adjustable opacity and per-sub-region visibility (isolate the enhancing rim, hide edema, etc.).
+- **Overlay controls** — adjustable opacity, per-sub-region visibility (isolate the enhancing rim, hide edema, etc.), and optional colorblind-friendly patterns (dots/stripes/crosshatch) so the overlay doesn't rely on hue alone.
 - **Tumor-extent profile** — a per-plane chart of tumor voxel count across all slices, marking the current slice, so you can jump straight to the largest cross-section.
 - **Downloadable markdown report** — per-region volumes and key slice indices, alongside the predicted mask `.nii.gz` download.
+- **Test-time augmentation** — predictions average the original slice and its horizontal flip (mirroring a training augmentation) for modestly better accuracy at ~2x inference cost, still well under a second per slice.
 
 ## Architecture
 

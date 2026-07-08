@@ -167,6 +167,56 @@ is the basis for calling the app verified end-to-end despite never seeing
 it live in a browser. If you have a normal (non-sandboxed) browser,
 `streamlit run app.py` and click through it yourself too.
 
+## Second elevation pass: real data, 3D viewer, TTA, accessibility
+
+After the first review pass, the user asked to (1) get real Kaggle credentials
+and actually train on real BraTS 2020 data, and (2) push further on "maximize
+perceived complexity and functionality" plus a real 3D brain visualization
+with region highlighting and cross-sections, "research looking style."
+
+- **3D viewer (`viewer3d.py`)**: evaluated PyVista/stpyvista, Plotly
+  `go.Volume`/`go.Isosurface`, and NiiVue. Picked **NiiVue**
+  (niivue.github.io) specifically because it's a real tool used in published
+  neuroimaging research (not a generic 3D library repurposed for this), and
+  because it renders 100% client-side via WebGL — no server-side VTK/OSMesa/
+  xvfb dependency, which is what would make PyVista risky to deploy on
+  Streamlit Community Cloud's free containers. Embedded via `st.iframe`
+  (not `st.components.v1.html`, which `AppTest` flagged as past its
+  announced removal window) as a 4th "3D View" tab alongside the existing
+  plane tabs, with the cross-section and opacity sliders built into the
+  HTML component itself — a component iframe can't be wired to external
+  Streamlit widgets without a custom bidirectional protocol, so those
+  controls live inside the generated HTML, not as separate `st.slider` calls.
+  Getting here took real debugging, not just picking a library and moving
+  on: the CDN URL/version I first guessed (`niivue@0.44.0/dist/niivue.esm.min.js`)
+  doesn't exist; the real ESM entry point has bare-specifier imports
+  (`gl-matrix`, etc.) that need a full import-map to resolve; the working
+  path is the UMD build (`niivue.umd.js`) via a plain `<script>` tag, which
+  self-contains all dependencies. Loading 3 separately-colored region
+  volumes (necrotic/edema/enhancing as distinct hues) in 3D render mode also
+  didn't composite correctly (colors silently disappeared) even though the
+  volumes loaded with correct data — rather than debug niivue's multi-overlay
+  3D blending further, I fell back to one combined tumor-region volume with
+  a single highlight color in the 3D view specifically, since the 2D plane
+  tabs already give the full 3-color WT/TC/ET breakdown in detail. Verified
+  the whole thing by generating the exact production HTML output and
+  loading it in a real browser before wiring it into `app.py` at all.
+- **Test-time augmentation** (`inference.py`): averages softmax
+  probabilities from each slice and its horizontal flip before argmax.
+  Deliberately *not* a 2.5D (multi-slice-context) upgrade, which the spec's
+  exact `in_channels=4` architecture would have to change to accommodate —
+  TTA is a real accuracy improvement that doesn't touch the pinned
+  architecture. Verified: TTA and non-TTA predictions agree 99.99% of the
+  time, differing only at ambiguous class-boundary voxels, which is exactly
+  what TTA is supposed to affect.
+- **Colorblind-accessible overlay patterns** (`app.py`): optional dot/
+  diagonal-stripe/crosshatch texture per tumor sub-region, toggleable,
+  so the overlay stays legible without relying on hue alone.
+- **`requirements.txt` pinned** to exact versions verified working in this
+  venv (was `>=` ranges) — `albumentations` in particular has had breaking
+  API changes across major versions, so an unpinned install could silently
+  build something different from what was tested here.
+
 ## Standalone product site (site/index.html)
 
 Midway through the build the user asked for a genuinely designed marketing
