@@ -28,6 +28,7 @@ from constants import (
 )
 from inference import compute_region_volumes_cm3, load_model, predict_full_volume
 from preprocess import load_patient_volumes
+from viewer3d import build_viewer_html, encode_volumes
 
 st.set_page_config(page_title="TumorTrace", page_icon="🧠", layout="wide")
 
@@ -416,7 +417,7 @@ if image is not None:
             "Colorblind-friendly patterns (dots / stripes / crosshatch)", value=False
         )
 
-    tabs = st.tabs(list(PLANES.keys()))
+    tabs = st.tabs(list(PLANES.keys()) + ["3D View"])
     plane_summary = {}
     for tab, (plane_name, axis) in zip(tabs, PLANES.items()):
         with tab:
@@ -477,6 +478,25 @@ if image is not None:
                     spine.set_color("#263241")
                 st.pyplot(fig)
                 plt.close(fig)
+
+    with tabs[len(PLANES)]:
+        st.markdown('<div class="tt-section-label">Interactive 3D render</div>', unsafe_allow_html=True)
+        st.caption(
+            "Client-side WebGL (NiiVue) — drag to rotate, scroll to zoom, "
+            "use the sliders below the render for cross-sections and tumor opacity."
+        )
+        volume_cache_key = (cache_key, base_modality)
+        if st.session_state.get("viewer3d_key") != volume_cache_key:
+            modality_idx = MODALITIES.index(base_modality.lower())
+            with st.spinner("Encoding volumes for the 3D viewer..."):
+                base_b64, mask_b64 = encode_volumes(image[modality_idx], pred_mask, affine)
+            st.session_state["viewer3d_key"] = volume_cache_key
+            st.session_state["viewer3d_base_b64"] = base_b64
+            st.session_state["viewer3d_mask_b64"] = mask_b64
+        html_str = build_viewer_html(
+            st.session_state["viewer3d_base_b64"], st.session_state["viewer3d_mask_b64"], height=600
+        )
+        st.iframe(html_str, height=600)
 
     st.markdown('<div class="tt-section-label">Tumor volume summary</div>', unsafe_allow_html=True)
     volumes = compute_region_volumes_cm3(pred_mask, zooms)
