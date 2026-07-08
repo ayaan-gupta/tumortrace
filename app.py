@@ -172,11 +172,14 @@ def run_inference(image, cache_key):
     """Runs once per loaded volume; predicted labels + per-voxel class
     probabilities (needed for the confidence heatmap view) are computed in
     the same forward pass and cached in session_state so neither the plane
-    tabs nor the sliders ever re-trigger the model."""
+    tabs nor the sliders ever re-trigger the model. Uses test-time
+    augmentation (horizontal-flip averaging) by default -- roughly doubles
+    inference time, which is still well under a second per slice, for
+    typically better boundary accuracy."""
     if st.session_state.get("volume_key") != cache_key:
         model, device = get_model()
-        with st.spinner("Running segmentation model on all slices (CPU, one-time per volume)..."):
-            pred_mask, probs = predict_full_volume(image, model, device, return_probs=True)
+        with st.spinner("Running segmentation model on all slices (one-time per volume)..."):
+            pred_mask, probs = predict_full_volume(image, model, device, return_probs=True, use_tta=True)
         st.session_state["volume_key"] = cache_key
         st.session_state["pred_mask"] = pred_mask
         st.session_state["probs"] = probs

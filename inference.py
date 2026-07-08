@@ -25,12 +25,18 @@ def load_model(checkpoint_path=BEST_CHECKPOINT_PATH, device=None):
 
 
 @torch.no_grad()
-def predict_cropped_volume(model, image, device, batch_size=16, return_probs=False):
+def predict_cropped_volume(model, image, device, batch_size=16, return_probs=False, use_tta=False):
     """image: (4, size, size, D) float32 array, already center-cropped/padded.
     Returns predicted label volume (size, size, D) as uint8, and (if
     return_probs) the full per-class softmax probability volume
     (NUM_CLASSES, size, size, D) as float32 — used for the app's model-
-    confidence heatmap view."""
+    confidence heatmap view.
+
+    use_tta: if True, averages softmax probabilities from each slice and its
+    horizontal flip before taking argmax. Horizontal flip specifically
+    mirrors the HorizontalFlip augmentation train.py applies, so this is
+    test-time augmentation the model was actually trained to be invariant
+    to — not an arbitrary transform — at the cost of ~2x inference time."""
     num_slices = image.shape[-1]
     preds = np.zeros((image.shape[1], image.shape[2], num_slices), dtype=np.uint8)
     probs = np.zeros((NUM_CLASSES, image.shape[1], image.shape[2], num_slices), dtype=np.float32) if return_probs else None
@@ -40,17 +46,21 @@ def predict_cropped_volume(model, image, device, batch_size=16, return_probs=Fal
         batch = image[:, :, :, start:end]                       # (4, H, W, b)
         batch = np.transpose(batch, (3, 0, 1, 2))                # (b, 4, H, W)
         batch_t = torch.from_numpy(np.ascontiguousarray(batch, dtype=np.float32)).to(device)
-        logits = model(batch_t)
-        batch_preds = torch.argmax(logits, dim=1).cpu().numpy()  # (b, H, W)
+
+        avg_probs = torch.softmax(model(batch_t), dim=1)
+        if use_tta:
+            flipped_probs = torch.softmax(model(torch.flip(batch_t, dims=[3])), dim=1)
+            avg_probs = (avg_probs + torch.flip(flipped_probs, dims=[3])) / 2
+
+        batch_preds = torch.argmax(avg_probs, dim=1).cpu().numpy()  # (b, H, W)
         preds[:, :, start:end] = np.transpose(batch_preds, (1, 2, 0)).astype(np.uint8)
         if return_probs:
-            batch_probs = torch.softmax(logits, dim=1).cpu().numpy()  # (b, C, H, W)
-            probs[:, :, :, start:end] = np.transpose(batch_probs, (1, 2, 3, 0))
+            probs[:, :, :, start:end] = np.transpose(avg_probs.cpu().numpy(), (1, 2, 3, 0))
 
     return (preds, probs) if return_probs else preds
 
 
-def predict_full_volume(image, model, device, return_probs=False):
+def predict_full_volume(image, model, device, return_probs=False, use_tta=False):
     """image: already-normalized (4, H, W, D) array in native (uncropped) geometry.
     Handles the center-crop -> predict -> uncrop round trip and returns a
     prediction at the same (H, W, D) as the input. Shared by segment_volume
@@ -69,9 +79,9 @@ def predict_full_volume(image, model, device, return_probs=False):
     ], axis=-1)  # (4, CROP_SIZE, CROP_SIZE, D)
 
     if return_probs:
-        cropped_pred, cropped_probs = predict_cropped_volume(model, cropped, device, return_probs=True)
+        cropped_pred, cropped_probs = predict_cropped_volume(model, cropped, device, return_probs=True, use_tta=use_tta)
     else:
-        cropped_pred = predict_cropped_volume(model, cropped, device)
+        cropped_pred = predict_cropped_volume(model, cropped, device, use_tta=use_tta)
 
     pred_mask = np.stack([
         uncrop_or_pad_2d(cropped_pred[:, :, d], orig_h, orig_w, size=CROP_SIZE)
@@ -92,7 +102,7 @@ def predict_full_volume(image, model, device, return_probs=False):
     return pred_mask, full_probs
 
 
-def segment_volume(patient_dir, checkpoint_path=BEST_CHECKPOINT_PATH, model=None, device=None):
+def segment_volume(patient_dir, checkpoint_path=BEST_CHECKPOINT_PATH, model=None, device=None, use_tta=False):
     """Run the full preprocessing + per-slice prediction + reassembly pipeline
     on a directory containing the 4 modality NIfTI volumes.
 
@@ -107,7 +117,7 @@ def segment_volume(patient_dir, checkpoint_path=BEST_CHECKPOINT_PATH, model=None
     device = device or next(model.parameters()).device
 
     image, _, zooms, affine = load_patient_volumes(patient_dir, load_seg=False)
-    pred_mask = predict_full_volume(image, model, device)
+    pred_mask = predict_full_volume(image, model, device, use_tta=use_tta)
     return pred_mask, zooms, affine
 
 
@@ -133,9 +143,10 @@ if __name__ == "__main__":
     parser.add_argument("patient_dir")
     parser.add_argument("--checkpoint", default=BEST_CHECKPOINT_PATH)
     parser.add_argument("--out", default="prediction.nii.gz")
+    parser.add_argument("--tta", action="store_true", help="Average predictions with a horizontal flip (~2x slower, usually more accurate)")
     args = parser.parse_args()
 
-    pred_mask, zooms, affine = segment_volume(args.patient_dir, args.checkpoint)
+    pred_mask, zooms, affine = segment_volume(args.patient_dir, args.checkpoint, use_tta=args.tta)
     save_prediction_nifti(pred_mask, affine, args.out)
     volumes = compute_region_volumes_cm3(pred_mask, zooms)
     print(f"Saved prediction to {args.out}")

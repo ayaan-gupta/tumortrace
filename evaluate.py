@@ -70,7 +70,7 @@ def evaluate_patient(patient_id, patient_dir, model, device):
                   for c in range(image.shape[0])], axis=0)
         for d in range(num_slices)
     ], axis=-1)
-    cropped_pred = predict_cropped_volume(model, cropped, device)
+    cropped_pred = predict_cropped_volume(model, cropped, device, use_tta=True)
 
     cropped_gt = np.stack([
         center_crop_or_pad_2d(seg[:, :, d], size=CROP_SIZE) for d in range(num_slices)
