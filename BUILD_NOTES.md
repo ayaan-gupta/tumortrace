@@ -45,6 +45,72 @@ reviewed by eye.
 sandbox-only aid so this repo's code paths are demonstrably correct, kept
 separate so it's obviously not part of the production interface.
 
+## Product elevations beyond the base spec
+
+The user asked, mid-build, not to leave out anything that could elevate the
+product, and for a visual identity that doesn't read as generic AI-generated
+UI (no gradient hero banners, no glassmorphic rounded cards). `app.py` ended
+up meaningfully beyond the §9 spec as a result:
+
+- **Custom "radiology workstation" visual identity**: flat bordered panels
+  (`st.container(border=True)`, re-skinned via CSS to sharp corners + a
+  charcoal/coral palette), IBM Plex Mono for technical labels, rectangular
+  outlined tags instead of rounded pills, and a `.streamlit/config.toml`
+  dark theme so native widgets (sliders, buttons, checkboxes) match without
+  fighting Streamlit's internal DOM structure.
+- **Multi-planar reformatting**: Axial / Sagittal / Coronal tabs, each with
+  its own independent slice slider and its own "largest tumor cross-section"
+  default, all reslicing the *same* cached 3D prediction — no extra
+  inference cost.
+- **Model-confidence heatmap mode**: a toggle next to the segmentation
+  overlay that renders per-voxel max-softmax-probability instead of the
+  label overlay, so a user can see where the model is uncertain, not just
+  what it predicted. `inference.predict_full_volume(..., return_probs=True)`
+  computes this in the *same* forward pass as the segmentation labels (one
+  inference run per volume, per the spec's performance requirement — the
+  confidence feature does not add a second model pass).
+- **Overlay controls**: opacity slider and per-sub-region visibility
+  checkboxes (hide edema to see the core more clearly, etc.), not present in
+  the base spec.
+- **Tumor-extent profile**: a small area chart per plane showing tumor voxel
+  count across every slice index, with the current slice marked — lets a
+  user jump straight to where the tumor is largest instead of scrubbing
+  blindly.
+- **Downloadable markdown report** alongside the NIfTI mask download:
+  per-region volumes, voxel spacing, and the largest-cross-section slice
+  index per plane, with the disclaimer restated in the file itself so it
+  travels with the artifact if shared.
+
+## Standalone product site (site/index.html)
+
+Midway through the build the user asked for a genuinely designed marketing
+front-door for the tool — three.js, animation, editorial typography, dark
+theme — in the register of premium tech-startup sites (they attached
+reference screenshots), explicitly *not* the Streamlit app's default look.
+`site/index.html` is a self-contained static page (three.js loaded via
+import-map CDN, Fraunces/Inter/IBM Plex Mono via Google Fonts, no build
+step) with a hero built around the product's actual geometry, not generic
+decoration: a wireframe icosahedron ("head") with three orbiting rings
+representing the axial/sagittal/coronal imaging planes, and a highlighted
+"tumor" node with accent-colored connecting lines. It links out to the
+Streamlit app (`appUrl` in the config block at the bottom of the file —
+update this after deploying) and to the GitHub repo (`githubUrl`, same
+block). The brand accent (coral-red, `#ff5a45`) was then carried back into
+`app.py`'s "workstation" theme so the two surfaces read as one product
+instead of two different palettes.
+
+I browser-tested this myself end-to-end (desktop viewport, scroll-reveal
+animations, three.js render, all section content, console errors) rather
+than asking the user to — found and fixed one real bug this way: a stale
+closure in the animated console-log loop (`step` had already been
+incremented by the time a `setTimeout` callback referenced `lineEls[step]`,
+which threw once the loop reached the last line). Mobile-viewport testing
+via the browser tool's window-resize was unreliable in this sandbox (the
+resize call reported success but `window.innerWidth` never changed), so the
+`@media` breakpoints are verified by source inspection (standard, simple
+rules) rather than a live narrow-viewport screenshot — worth a manual check
+on a real phone before shipping.
+
 ## Other decisions / edge cases
 
 - **Python 3.11 used instead of 3.10.** Spec says "3.10+"; 3.11 was the
