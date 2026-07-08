@@ -25,7 +25,7 @@ from constants import (
     WEIGHT_DECAY,
 )
 from dataset import build_datasets
-from model import build_loss, build_model, region_dice_scores
+from model import best_available_device, build_loss, build_model, region_dice_scores
 
 
 def _run_epoch(model, loader, criterion, device, optimizer=None, scaler=None):
@@ -76,7 +76,7 @@ def train_model(
     num_workers=2,
     device=None,
 ):
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or best_available_device()
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
 
     train_ds, val_ds, _ = build_datasets(processed_dir)

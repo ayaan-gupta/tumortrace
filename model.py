@@ -6,6 +6,18 @@ import torch.nn as nn
 from constants import NUM_CLASSES, NUM_MODALITIES, REGION_LABELS
 
 
+def best_available_device():
+    """cuda > mps (Apple Silicon) > cpu. AMP in train.py is still guarded to
+    cuda-only (MPS's autocast/GradScaler support is incomplete), but plain
+    fp32 training/inference on MPS is still dramatically faster than CPU
+    (~13x observed on an M4 Pro) and is otherwise a drop-in torch.device."""
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 def build_model(encoder_name="resnet34", encoder_weights="imagenet"):
     return smp.Unet(
         encoder_name=encoder_name,

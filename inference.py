@@ -5,12 +5,12 @@ import numpy as np
 import torch
 
 from constants import BEST_CHECKPOINT_PATH, CROP_SIZE, NUM_CLASSES, REGION_LABELS
-from model import build_model, region_mask
+from model import best_available_device, build_model, region_mask
 from preprocess import center_crop_or_pad_2d, load_patient_volumes, uncrop_or_pad_2d
 
 
 def load_model(checkpoint_path=BEST_CHECKPOINT_PATH, device=None):
-    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = device or best_available_device()
     # encoder_weights=None: skip the ImageNet pretrained-weight download entirely —
     # load_state_dict() below immediately overwrites every weight with the trained
     # checkpoint, so fetching ImageNet weights first is pure wasted network I/O
