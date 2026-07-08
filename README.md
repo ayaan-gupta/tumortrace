@@ -33,9 +33,9 @@ Before training, I wrote down realistic target ranges for this approach based on
 
 ![Achieved Dice per region plotted against the pre-registered target range](results/figures/results_vs_target.png)
 
-Dice and sensitivity tell a clean story. HD95 is the honest complication: it's the 95th-percentile Hausdorff distance, essentially "how far off is your worst-case boundary point," and it punishes small stray false-positive islands far more harshly than Dice does, since Dice is a volume-overlap measure and barely notices a handful of misclassified voxels sitting somewhere they shouldn't be. A WT Dice of 0.90 with an HD95 of 15mm is a normal combination for this kind of model, not a contradiction: it means the bulk of the tumor is segmented very accurately while a small number of outlier pixels elsewhere in the brain pull the worst-case distance up. It's worth knowing about before you stare at that number and wonder what went wrong. Nothing did.
+HD95 is the 95th-percentile Hausdorff distance: how far off the worst-case boundary point is. It punishes small stray false-positive islands far more harshly than Dice does, since Dice is a volume-overlap measure and barely notices a handful of misclassified voxels sitting somewhere they shouldn't be. A WT Dice of 0.90 with an HD95 of 15mm is a normal combination for this kind of model, not a contradiction: the bulk of the tumor is segmented very accurately, and a small number of outlier pixels elsewhere in the brain pull the worst-case distance up. Worth knowing before you stare at that number and wonder what went wrong. Nothing did.
 
-Here's what that segmentation actually looks like against ground truth, on real held-out test patients:
+The following shows what segmentation looks like on real held-out test patients:
 
 ![Ground truth versus predicted segmentation on 8 real test slices](results/qualitative_examples.png)
 
@@ -43,7 +43,7 @@ Most of these are close calls between the model and the radiologist who drew the
 
 ## App features
 
-The point of the app isn't just "upload a scan, see a colored blob." Once a volume is loaded, inference runs exactly once and everything below is free:
+Once a volume is loaded, inference runs exactly once, and everything below comes from that single pass:
 
 - **Multi-planar viewing.** Independent Axial, Sagittal, and Coronal tabs, all reformatted from the same predicted 3D volume, no extra inference cost per tab.
 - **An actual 3D render.** A fourth tab renders the brain and the tumor as a real, rotatable, zoomable 3D volume using [NiiVue](https://niivue.github.io), the same WebGL viewer used in published neuroimaging research. It runs entirely in your browser, drag to rotate it, scroll to zoom, and there's a cross-section slider so you can cut into the volume and see the tumor from the inside.
